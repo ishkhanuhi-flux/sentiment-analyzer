@@ -1,6 +1,6 @@
 import streamlit as st
 from modules import fetch_google_alerts
-from modules import analyze_sentiment
+from transformers import pipeline
 import matplotlib.pyplot as plt
 
 BRAND_RSS_URLS = {
@@ -12,12 +12,33 @@ BRAND_RSS_URLS = {
     'Nike': 'https://www.google.com/alerts/feeds/10432254465216124981/14590602689292939912'
 }
 
+MODEL_NAMES = {
+    'BERT': 'nlptown/bert-base-multilingual-uncased-sentiment',
+    'RoBERTa': 'textattack/roberta-base-imdb',
+    'DistilBERT': 'distilbert-base-uncased',
+    'BART': 'facebook/bart-large-mnli'
+}
+
+
+@st.cache_data
+def load_model(model_name):
+    return pipeline('sentiment-analysis', model=model_name)
+
+
+def analyze_sentiment_with_model(text, model):
+    result = model(text)
+    st.write(result)
+    return result[0]['label']
+
 
 def main():
     st.title('Google Alerts Sentiment Analysis')
 
-    # Dropdown for brand selection
+    # Dropdown for brand and model selection
     selected_brand = st.selectbox('Select a brand:', list(BRAND_RSS_URLS.keys()))
+    selected_model = st.selectbox('Select a model:', list(MODEL_NAMES.keys()))
+
+    model = load_model(MODEL_NAMES[selected_model])
 
     if st.button('Analyze'):
         mentions = fetch_google_alerts(BRAND_RSS_URLS[selected_brand])
@@ -26,15 +47,12 @@ def main():
         neutral_count = 0
 
         for mention in mentions:
-            polarity = analyze_sentiment(mention['summary'])
-            if polarity > 0:
-                sentiment = 'Positive'
+            sentiment = analyze_sentiment_with_model(mention['summary'], model)
+            if sentiment == 'POSITIVE':
                 positive_count += 1
-            elif polarity < 0:
-                sentiment = 'Negative'
+            elif sentiment == 'NEGATIVE':
                 negative_count += 1
             else:
-                sentiment = 'Neutral'
                 neutral_count += 1
             st.write(f"Title: {mention['title']}")
             st.write(f"Link: {mention['link']}")
@@ -47,7 +65,7 @@ def main():
         plt.bar(labels, values, color=['green', 'red', 'blue'])
         plt.xlabel('Sentiment')
         plt.ylabel('Count')
-        plt.title(f'Sentiment Analysis for {selected_brand}')
+        plt.title(f'Sentiment Analysis for {selected_brand} using {selected_model}')
         st.pyplot(plt)
 
 
